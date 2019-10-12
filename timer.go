@@ -16,7 +16,7 @@ func main() {
 	log.Println(systemTime)
 	log.Println(foo)
 	//save to db //基于文件的数据库
-
+	//todo, bbolt
 	//search
 	//查询某一天最早的时间
 
