@@ -1,15 +1,15 @@
 package main
 
 import (
-	"fmt"
 	log "github.com/sirupsen/logrus"
 	"github.com/wiloon/pingd-log/logconfig"
-	"go.etcd.io/bbolt"
+	"github.com/wiloon/pingd-utils/utils"
 	"net/http"
 	"time"
+	"timer/database"
+	"timer/heartbeat"
+	"timer/record"
 )
-
-const bucketTimer = "timer"
 
 func main() {
 	logconfig.Init()
@@ -19,37 +19,51 @@ func main() {
 	systemTimeStrDay := systemTime.Format("2006-01-02")
 	// get net time via http request
 	resp, _ := http.Get("http://www.ntsc.ac.cn")
-	netTime := resp.Header.Get("Date")
+	netTimeOriginal := resp.Header.Get("Date")
+	netTime := utils.StringToDateRFC1123(netTimeOriginal)
+	loc, _ := time.LoadLocation("Local")
+	netTime = netTime.In(loc)
+	netTimeStr := netTime.Format("2006-01-02T15:04:05Z07:00")
+	log.Infof("system time: %v, net time: %v", systemTimeStr, netTimeStr)
 
-	log.Infof("system time: %v", "net time: %v", systemTimeStr, netTime)
+	// 先查一下昨天的记录有没有
+	d, _ := time.ParseDuration("-24h")
+	yesterday := systemTime.Add(d)
+	yesterdayStr := yesterday.Format("2006-01-02")
 
-	//save to db //基于文件的数据库
+	yesterdayRecord := record.GetRecordByDate(yesterdayStr)
 
-	db, err := bbolt.Open("/tmp/foo.db", 0666, nil)
-	if err != nil {
-		log.Println(err)
-	}
-	defer db.Close()
-
-	_ = db.Update(func(tx *bbolt.Tx) error {
-		b, err := tx.CreateBucketIfNotExists([]byte(bucketTimer))
-		if err != nil {
-			fmt.Println(err)
+	if yesterdayRecord.NotClose() {
+		// 如果 昨天的记录没关掉，查询昨天最后一次心跳
+		yesterdayHeartbeat := heartbeat.GetByDate(yesterdayStr)
+		if yesterdayHeartbeat != "" {
+			//填充昨天的记录
+			yesterdayRecord.Close(yesterdayHeartbeat)
 		}
-		err = b.Put([]byte(systemTimeStrDay), []byte(systemTimeStr))
-		return err
-	})
+	}
 
-	db.View(func(tx *bbolt.Tx) error {
-		b := tx.Bucket([]byte(bucketTimer))
-		v := b.Get([]byte(systemTimeStrDay))
-		fmt.Printf("value: %s\n", v)
-		return nil
-	})
+	//检查今天的心跳是否存在
+	todayHeartbeat := heartbeat.GetByDate(systemTimeStrDay)
+	if todayHeartbeat == "" {
+		//今天的第一次心跳作为记录的开始时间
+		record.NewOne(systemTimeStr)
+
+	}
+
+	//log.Infof("yesterday end time, key: %v, value: %v", yesterdayStr, yesterdayEndTime)
+	//if yesterdayEndTime != "" {
+	//
+	//}
+
+	database.Set(systemTimeStrDay, systemTimeStr)
+
+	value := database.Get(systemTimeStrDay)
+	log.Info("value:" + value)
 
 	//search
 	//查询某一天最早的时间
 
 	// 历史数据整理
 	// 从实时表统计  ，结果 插入历史表
+	log.Info("end")
 }
