@@ -2,6 +2,8 @@ package record
 
 import (
 	"encoding/json"
+	log "github.com/sirupsen/logrus"
+	"github.com/wiloon/pingd-utils/utils"
 	"time"
 	"timer/database"
 )
@@ -17,8 +19,10 @@ type TimerRecord struct {
 func (record *TimerRecord) IsEmpty() bool {
 	return record.Start == "" && record.End == ""
 }
-func (record *TimerRecord) NotClose() bool {
-	return record.Start != "" && record.End == ""
+func (record *TimerRecord) IsClosed() bool {
+	closed := record.Start != "" && record.End != ""
+	log.Infof("record is closed: %v", closed)
+	return closed
 }
 func (record *TimerRecord) GetKey() string {
 	return record.Date + timerRecordSuffix
@@ -34,12 +38,13 @@ func GetRecordByDate(date string) TimerRecord {
 	if value != "" {
 		_ = json.Unmarshal([]byte(value), &result)
 	}
+	log.Infof("get record by date, date: %v, result: %v", date, result)
 	return result
 }
 
-func NewOne(timestamp string) {
-	rec := TimerRecord{Start: timestamp}
-	rec.Date = time.Now().Format("2006-01-02")
+func NewOne(timestamp time.Time) {
+	rec := TimerRecord{Start: utils.DateToStringYMDHMSZ(timestamp)}
+	rec.Date = utils.DateToStringYMD(timestamp)
 	j, _ := json.Marshal(rec)
 	database.Set(rec.GetKey(), string(j))
 }

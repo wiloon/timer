@@ -6,64 +6,68 @@ import (
 	"github.com/wiloon/pingd-utils/utils"
 	"net/http"
 	"time"
-	"timer/database"
 	"timer/heartbeat"
 	"timer/record"
 )
 
+var cachedDateYMD string
+
 func main() {
 	logconfig.Init()
-	// get system time
-	systemTime := time.Now()
-	systemTimeStr := systemTime.Format("2006-01-02T15:04:05Z07:00")
-	systemTimeStrDay := systemTime.Format("2006-01-02")
-	// get net time via http request
-	resp, _ := http.Get("http://www.ntsc.ac.cn")
-	netTimeOriginal := resp.Header.Get("Date")
-	netTime := utils.StringToDateRFC1123(netTimeOriginal)
-	loc, _ := time.LoadLocation("Local")
-	netTime = netTime.In(loc)
-	netTimeStr := netTime.Format("2006-01-02T15:04:05Z07:00")
-	log.Infof("system time: %v, net time: %v", systemTimeStr, netTimeStr)
 
-	// 先查一下昨天的记录有没有
-	d, _ := time.ParseDuration("-24h")
-	yesterday := systemTime.Add(d)
-	yesterdayStr := yesterday.Format("2006-01-02")
+	ticker := time.NewTicker(10 * time.Second)
+	for ; true; <-ticker.C {
+		// get system time
+		systemTime := time.Now()
 
-	yesterdayRecord := record.GetRecordByDate(yesterdayStr)
+		// get net time via http request
+		resp, _ := http.Get("http://www.ntsc.ac.cn")
+		netTimeOriginal := resp.Header.Get("Date")
+		netTime := utils.StringToDateRFC1123(netTimeOriginal)
+		loc, _ := time.LoadLocation("Local")
+		netTime = netTime.In(loc)
+		netTimeStr := netTime.Format("2006-01-02T15:04:05Z07:00")
+		log.Infof("system time: %v, net time: %v", systemTime, netTimeStr)
+		timerTask(systemTime)
+	}
 
-	if yesterdayRecord.NotClose() {
-		// 如果 昨天的记录没关掉，查询昨天最后一次心跳
-		yesterdayHeartbeat := heartbeat.GetByDate(yesterdayStr)
-		if yesterdayHeartbeat != "" {
-			//填充昨天的记录
-			yesterdayRecord.Close(yesterdayHeartbeat)
+}
+
+func timerTask(currentTime time.Time) {
+	log.Infof("timer task start: %v", currentTime)
+
+	currentTimeYMD := currentTime.Format("2006-01-02")
+	currentTimeYMDHMS := currentTime.Format("2006-01-02T15:04:05Z07:00")
+
+	if cachedDateYMD != currentTimeYMD {
+		cachedDateYMD = currentTimeYMD
+
+		// 先查一下昨天的记录有没有
+		d, _ := time.ParseDuration("-24h")
+		yesterday := currentTime.Add(d)
+		yesterdayStrYMD := yesterday.Format("2006-01-02")
+
+		yesterdayRecord := record.GetRecordByDate(yesterdayStrYMD)
+
+		if !yesterdayRecord.IsClosed() {
+			// 如果 昨天的记录没关掉，查询昨天最后一次心跳
+			yesterdayHeartbeat := heartbeat.GetByDate(yesterdayStrYMD)
+			if yesterdayHeartbeat != "" {
+				//填充昨天的记录
+				yesterdayRecord.Close(yesterdayHeartbeat)
+				log.Infof("close yesterday record, end time: %v", yesterdayHeartbeat)
+			}
 		}
 	}
 
 	//检查今天的心跳是否存在
-	todayHeartbeat := heartbeat.GetByDate(systemTimeStrDay)
+	todayHeartbeat := heartbeat.GetByDate(currentTimeYMD)
 	if todayHeartbeat == "" {
 		//今天的第一次心跳作为记录的开始时间
-		record.NewOne(systemTimeStr)
-
+		record.NewOne(currentTime)
+		log.Infof("today heartbeat not exist, create new record, start time: %v", currentTimeYMDHMS)
 	}
-
-	//log.Infof("yesterday end time, key: %v, value: %v", yesterdayStr, yesterdayEndTime)
-	//if yesterdayEndTime != "" {
-	//
-	//}
-
-	database.Set(systemTimeStrDay, systemTimeStr)
-
-	value := database.Get(systemTimeStrDay)
-	log.Info("value:" + value)
-
-	//search
-	//查询某一天最早的时间
-
-	// 历史数据整理
-	// 从实时表统计  ，结果 插入历史表
-	log.Info("end")
+	heartbeat.Update(currentTimeYMD, currentTimeYMDHMS)
+	log.Infof("update heartbeat: %v", currentTimeYMDHMS)
+	log.Info("timer task end")
 }

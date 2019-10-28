@@ -2,8 +2,8 @@ package database
 
 import (
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"go.etcd.io/bbolt"
-	"log"
 )
 
 var db *bbolt.DB
@@ -12,17 +12,33 @@ const bucketName = "timer"
 
 func init() {
 	var err error
-	db, err = bbolt.Open("/tmp/foo.db", 0666, nil)
+	db, err = bbolt.Open("foo.db", 0666, nil)
 	if err != nil {
 		log.Println(err)
 	}
+
+	_ = db.Update(func(tx *bbolt.Tx) error {
+		_, err := tx.CreateBucketIfNotExists([]byte(bucketName))
+		if err != nil {
+			fmt.Println(err)
+		}
+		return err
+	})
 }
 
 func Get(key string) string {
 	var value string
+
 	_ = db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(bucketName))
-		value = string(b.Get([]byte(key)))
+
+		valueByte := b.Get([]byte(key))
+		if valueByte == nil {
+			value = ""
+		} else {
+			value = string(valueByte)
+		}
+
 		return nil
 	})
 	return value
