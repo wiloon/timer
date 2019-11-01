@@ -1,0 +1,4 @@
+[log]
+level="info"
+path="/data"
+file-name="timer.log"

@@ -11,6 +11,7 @@ import (
 )
 
 var cachedDateYMD string
+var todayStartTime time.Time
 
 func main() {
 	logconfig.Init()
@@ -21,7 +22,7 @@ func main() {
 		systemTime := time.Now()
 
 		// get net time via http request
-		resp, _ := http.Get("http://www.ntsc.ac.cn")
+		resp, _ := http.Get("http://www.taobao.com")
 		netTimeOriginal := resp.Header.Get("Date")
 		netTime := utils.StringToDateRFC1123(netTimeOriginal)
 		loc, _ := time.LoadLocation("Local")
@@ -40,13 +41,16 @@ func timerTask(currentTime time.Time) {
 	currentTimeYMDHMS := currentTime.Format("2006-01-02T15:04:05Z07:00")
 
 	if cachedDateYMD != currentTimeYMD {
+		log.Infof("cached date: %v, current date: %v", cachedDateYMD, currentTimeYMD)
+
 		cachedDateYMD = currentTimeYMD
 
-		// 先查一下昨天的记录有没有
+		// 检查昨天的记录是否存在
 		d, _ := time.ParseDuration("-24h")
 		yesterday := currentTime.Add(d)
 		yesterdayStrYMD := yesterday.Format("2006-01-02")
 
+		log.Infof("check if record of yesterday is exist, date: %v", yesterdayStrYMD)
 		yesterdayRecord := record.GetRecordByDate(yesterdayStrYMD)
 
 		if !yesterdayRecord.IsClosed() {
@@ -65,9 +69,10 @@ func timerTask(currentTime time.Time) {
 	if todayHeartbeat == "" {
 		//今天的第一次心跳作为记录的开始时间
 		record.NewOne(currentTime)
+		todayStartTime = currentTime
 		log.Infof("today heartbeat not exist, create new record, start time: %v", currentTimeYMDHMS)
 	}
 	heartbeat.Update(currentTimeYMD, currentTimeYMDHMS)
 	log.Infof("update heartbeat: %v", currentTimeYMDHMS)
-	log.Info("timer task end")
+	log.Info("timer task end, today start time:  %v", todayStartTime)
 }
