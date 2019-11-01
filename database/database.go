@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	config "github.com/wiloon/pingd-config"
 	"go.etcd.io/bbolt"
 )
 
@@ -12,7 +13,7 @@ const bucketName = "timer"
 
 func init() {
 	var err error
-	db, err = bbolt.Open("foo.db", 0666, nil)
+	db, err = bbolt.Open(config.GetString("db.path", "timer.db"), 0666, nil)
 	if err != nil {
 		log.Println(err)
 	}

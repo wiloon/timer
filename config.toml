@@ -2,3 +2,6 @@
 level="info"
 path="/data"
 file-name="timer.log"
+
+[db]
+path="/data/timer.db"
