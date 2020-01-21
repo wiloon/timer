@@ -1,4 +1,4 @@
-FROM golang:1.13.3 AS build
+FROM golang:1.13.6 AS build
 
 ENV GO111MODULE on
 WORKDIR /go/src/workdir
